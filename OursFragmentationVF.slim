@@ -1,0 +1,213 @@
+// Note : Ce script a ete construit en s'appuyant sur le manuel de SLiM et
+//  sur les recettes deja proposees dans SLiMgui via "Open Recipe", puis adapte a notre problematique.
+// reference manuel 1.1, 1.4, 4.1, 5.2, 5.3
+
+initialize() {
+	// modele Wright-Fisher
+   initializeSLiMModelType("WF");
+
+   //pas de pedigrees ici
+   initializeSLiMOptions(keepPedigrees=F);
+
+   // scenario et repetition
+   if (!exists("scenario")) defineConstant("scenario", "E");
+   if (!exists("rep"))      defineConstant("rep", 1);
+
+   // chemin du fichier de sortie a adapter
+   defineConstant("outdir", "D:/IBI/donnees/scenario" + scenario);
+   defineConstant("outfile", outdir + "/scenario_" + scenario + "_rep" + rep + ".csv");
+
+   // nombre total de generations
+   defineConstant("G", 2000);
+
+    // longueur du genom
+   defineConstant("L", 1000000);
+
+   //taux de recombinaison
+   defineConstant("R", 1e-8);
+
+   // taux global de mutation
+   defineConstant("MU", 1e-7);
+
+     //effet des mutations sur la fitness
+   defineConstant("S_DEL", 0.002);
+   defineConstant("S_BEN", 0.001);
+
+   // proportion de mutations 
+   defineConstant("P_DEL", 0.19);
+   defineConstant("P_BEN", 0.01);
+   
+   // migration active seulement en E
+   if (scenario == "E")
+		defineConstant("MIG_RATE", 0.01);
+   else
+   	defineConstant("MIG_RATE", 0.0);
+
+   //types de mutations
+   initializeMutationType("m1", 0.5, "f", 0.0);      // neutre
+   initializeMutationType("m2", 0.5, "f", -S_DEL);   // deletere
+   initializeMutationType("m3", 0.5, "f",  S_BEN);   // benefique
+
+   // type d'element genomique
+   initializeGenomicElementType("g1", m1, 1.0);
+
+   // chromosome sur toute la longueur L
+   initializeGenomicElement(g1, 0, L - 1);
+
+   // parametres globaux
+   initializeRecombinationRate(R);
+   initializeMutationRate(MU);
+}
+
+1 early() {
+	
+	 // A une grande population 10000
+   if (scenario == "A")
+   	sim.addSubpop("p1", 10000);
+
+   // B une population plus petite 1000 comparaison a faire avec A
+   if (scenario == "B")
+		sim.addSubpop("p1", 1000);
+
+   // C 2 sous-populations
+   if (scenario == "C") {
+   	sim.addSubpop("p1", 500);
+      sim.addSubpop("p2", 500);
+      }
+
+   //D 54 sous-populations
+   if (scenario == "D") {
+   	for (i in 1:5)
+			sim.addSubpop("p" + i, 200);
+			}
+
+   // E 10 sous-populations avec migration comparaison a faire avec C et D
+   if (scenario == "E") {
+		for (i in 1:10)
+			sim.addSubpop("p" + i, 100);
+
+         // migration
+         p1.setMigrationRates(c(p2), c(MIG_RATE));
+         p2.setMigrationRates(c(p1, p3), c(MIG_RATE, MIG_RATE));
+         p3.setMigrationRates(c(p2, p4), c(MIG_RATE, MIG_RATE));
+         p4.setMigrationRates(c(p3, p5), c(MIG_RATE, MIG_RATE));
+         p5.setMigrationRates(c(p4, p6), c(MIG_RATE, MIG_RATE));
+         p6.setMigrationRates(c(p5, p7), c(MIG_RATE, MIG_RATE));
+         p7.setMigrationRates(c(p6, p8), c(MIG_RATE, MIG_RATE));
+         p8.setMigrationRates(c(p7, p9), c(MIG_RATE, MIG_RATE));
+         p9.setMigrationRates(c(p8, p10), c(MIG_RATE, MIG_RATE));
+         p10.setMigrationRates(c(p9), c(MIG_RATE));
+         }
+         // creation du fichier csv
+    		catn("Writing to: " + outfile);
+    		writeFile(outfile,
+        	"scenario,rep,gen,subpop,N,meanFitness,meanDel,meanBen,extinct\n");
+}
+
+//une partie des mutations neutres change de type
+mutation(m1) {
+	
+   u = runif(1);
+
+   // devient deletere
+   if (u < P_DEL) {
+		mut.setMutationType(m2);
+      return T;
+      }
+
+    // devient benefique
+    if (u < P_DEL + P_BEN) {
+        mut.setMutationType(m3);
+        return T;
+        }
+
+    // sinon reste acceptee
+    return T;
+}
+
+// supprssion epidemie et climatique a faire
+
+// calcule une fitness simple par individu
+function (float) calcFitness(object<Individual> ind) {
+	  
+   // nombre de mutations deleteres
+   nDel = size(ind.haplosomes.mutationsOfType(m2));
+
+   // nombre de mutations benefiques
+   nBen = size(ind.haplosomes.mutationsOfType(m3));
+
+   // effet multiplicatif simple
+   w = ((1.0 - S_DEL) ^ nDel) * ((1.0 + S_BEN) ^ nBen);
+
+    // securite si valeur invalide
+   if (!isFinite(w) | (w < 0.0)) w = 0.0;
+   return w;
+}
+
+fitnessEffect() {
+
+   // applique la fitness calculee
+   return calcFitness(individual);
+}
+
+// export des statistiques
+
+late() {
+	
+   // export toutes les 50 generations
+   if (sim.cycle % 50 != 0)
+		return;
+   // on parcourt chaque sous-population
+   for (sp in sim.subpopulations) {
+   	N = sp.individualCount;
+   	// indicateur d'extinction
+      extinct = 0;
+      if (N == 0) extinct = 1;
+
+      if (N > 0) {
+      	inds = sp.individuals;
+      	//sommes pour les moyennes
+         sumFit = 0.0;
+         sumDel = 0.0;
+         sumBen = 0.0;
+
+         for (ind in inds) {
+         	// fitness individuelle
+         	w = calcFitness(ind);
+            sumFit = sumFit + w;
+
+            // nb de mutations par type
+            nd = size(ind.haplosomes.mutationsOfType(m2));
+            nb = size(ind.haplosomes.mutationsOfType(m3));
+
+            // moyenne par individu diploide
+            sumDel = sumDel + (nd / 2.0);
+            sumBen = sumBen + (nb / 2.0);
+            }
+             // calcul des moyennes
+            meanFit = sumFit / N;
+            meanDel = sumDel / N;
+            meanBen = sumBen / N;
+            } else {
+            
+					// pas de moyenne si population eteinte
+            	meanFit = NAN;
+            	meanDel = NAN;
+            	meanBen = NAN;
+            	}
+
+		// ligne ecrite dans le csv
+      line = scenario + "," + rep + "," + sim.cycle + "," + sp.id + "," + N + ","
+           + meanFit + "," + meanDel + "," + meanBen + "," + extinct + "\n";
+
+      writeFile(outfile, line, append=T);
+      }
+
+	// fin normale de la simulation
+   if (sim.cycle == G)
+		sim.simulationFinished();
+
+}
+
+// arret
+2000 early() { sim.simulationFinished(); }

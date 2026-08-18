@@ -1,0 +1,13 @@
+# Python / Jupyter
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+*.py[cod]
+
+# Résultats locaux de simulation
+data/generated/
+
+# Environnements de développement
+.idea/
+.vscode/
+.DS_Store

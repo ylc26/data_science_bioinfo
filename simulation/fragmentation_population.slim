@@ -13,8 +13,8 @@ initialize() {
    if (!exists("scenario")) defineConstant("scenario", "E");
    if (!exists("rep"))      defineConstant("rep", 1);
 
-   // chemin du fichier de sortie a adapter
-   defineConstant("outdir", "D:/IBI/donnees/scenario" + scenario);
+   // dossier de sortie configurable avec -d outdir='"chemin"'
+   if (!exists("outdir")) defineConstant("outdir", ".");
    defineConstant("outfile", outdir + "/scenario_" + scenario + "_rep" + rep + ".csv");
 
    // nombre total de generations
@@ -75,7 +75,7 @@ initialize() {
       sim.addSubpop("p2", 500);
       }
 
-   //D 54 sous-populations
+   // D : 5 sous-populations
    if (scenario == "D") {
    	for (i in 1:5)
 			sim.addSubpop("p" + i, 200);
